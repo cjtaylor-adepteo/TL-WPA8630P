@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import timedelta
 
@@ -96,12 +97,17 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 
     # Call async_update at a fixed interval
     for sensor in sensors:
-        async_track_time_interval(hass, sensor.async_update, SCAN_INTERVAL)
+        async_track_time_interval(
+            hass,
+            lambda now, sensor=sensor: hass.async_create_task(sensor.async_update()),
+            SCAN_INTERVAL,
+        )
 
     # Also perform a bulk refresh on the same schedule (kept from original behavior)
-    async_track_time_interval(
-        hass, lambda _: [sensor.async_update() for sensor in sensors], SCAN_INTERVAL
-    )
+    async def _bulk_refresh(now):
+        await asyncio.gather(*(sensor.async_update() for sensor in sensors))
+
+    async_track_time_interval(hass, _bulk_refresh, SCAN_INTERVAL)
 
 
 class TechnicolorCGABaseSensor(SensorEntity):
